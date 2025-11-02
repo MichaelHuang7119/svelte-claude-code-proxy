@@ -1,4 +1,4 @@
-from utils.env import config
+from src.core.config import config
 from src.core.colored_logger import colored_logger
 from typing import Optional, Tuple
 

@@ -4,7 +4,7 @@ from datetime import datetime
 import uuid
 from typing import Optional
 
-from utils.env import config
+from src.core.config import config
 from src.core.logging import logger
 from src.core.client import OpenAIClient
 from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
@@ -54,12 +54,12 @@ async def validate_api_key(x_api_key: Optional[str] = Header(None), authorizatio
 async def handle_request_with_fallback(request: ClaudeMessagesRequest, http_request: Request, _: None = Depends(validate_api_key)):
     """Handle request with intelligent fallback logic"""
     try:
-        logger.debug(
-            f"Processing Claude request: model={request.model}, stream={request.stream}"
-        )
-
         # Generate unique request ID for cancellation tracking
         request_id = str(uuid.uuid4())
+        
+        logger.info(
+            f"[{request_id}] Processing Claude request: model={request.model}, stream={request.stream}"
+        )
 
         # Get initial client and model from provider manager
         try:
@@ -82,6 +82,7 @@ async def handle_request_with_fallback(request: ClaudeMessagesRequest, http_requ
         if request.stream:
             # Streaming response
             try:
+                logger.info(f"[{request_id}] Creating streaming chat completion with provider={provider_name}, model={model_name}")
                 openai_stream = openai_client.create_chat_completion_stream(
                     openai_request, request_id
                 )
@@ -110,6 +111,7 @@ async def handle_request_with_fallback(request: ClaudeMessagesRequest, http_requ
         else:
             # Non-streaming response
             try:
+                logger.info(f"[{request_id}] Creating non-streaming chat completion with provider={provider_name}, model={model_name}")
                 openai_response = await openai_client.create_chat_completion(
                     openai_request, request_id
                 )
@@ -212,6 +214,7 @@ async def try_fallback(request: ClaudeMessagesRequest, http_request: Request, _,
 @router.post("/v1/messages")
 async def create_message(request: ClaudeMessagesRequest, http_request: Request, _: None = Depends(validate_api_key)):
     """Create message with intelligent fallback logic"""
+    logger.info(f"Received POST /v1/messages request: model={request.model}, stream={request.stream}, messages_count={len(request.messages) if request.messages else 0}")
     return await handle_request_with_fallback(request, http_request, _)
 
 

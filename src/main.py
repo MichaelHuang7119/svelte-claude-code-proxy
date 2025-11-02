@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from src.api.endpoints import router as api_router
 import uvicorn
 import sys
-from utils.env import config
+from src.core.config import config
 
 app = FastAPI(title="Claude-to-OpenAI API Proxy", version="1.0.0")
 

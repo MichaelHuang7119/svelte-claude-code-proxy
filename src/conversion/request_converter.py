@@ -2,7 +2,7 @@ import json
 from typing import Dict, Any, List
 from src.core.constants import Constants
 from src.models.claude import ClaudeMessagesRequest, ClaudeMessage
-from utils.env import config
+from src.core.config import config
 import logging
 
 logger = logging.getLogger(__name__)

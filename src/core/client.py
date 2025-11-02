@@ -43,6 +43,11 @@ class OpenAIClient:
     
     async def create_chat_completion(self, request: Dict[str, Any], request_id: Optional[str] = None) -> Dict[str, Any]:
         """Send chat completion to OpenAI API with cancellation support."""
+        import logging
+        client_logger = logging.getLogger(__name__)
+        
+        if request_id:
+            client_logger.info(f"[{request_id}] Making chat.completions.create call: base_url={self.base_url}, model={request.get('model')}")
         
         # Create cancellation token if request_id provided
         if request_id:
@@ -102,6 +107,11 @@ class OpenAIClient:
     
     async def create_chat_completion_stream(self, request: Dict[str, Any], request_id: Optional[str] = None) -> AsyncGenerator[str, None]:
         """Send streaming chat completion to OpenAI API with cancellation support."""
+        import logging
+        client_logger = logging.getLogger(__name__)
+        
+        if request_id:
+            client_logger.info(f"[{request_id}] Making streaming chat.completions.create call: base_url={self.base_url}, model={request.get('model')}")
         
         # Create cancellation token if request_id provided
         if request_id:

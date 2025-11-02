@@ -1,5 +1,5 @@
 import logging
-from utils.env import config
+from src.core.config import config
 
 # Parse log level - extract just the first word to handle comments
 log_level = config.log_level.split()[0].upper()

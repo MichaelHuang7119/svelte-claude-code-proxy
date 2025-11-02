@@ -7,13 +7,16 @@ A proxy server that enables **Claude Code** to work with OpenAI-compatible API p
 ## Features
 
 - **Full Claude API Compatibility**: Complete `/v1/messages` endpoint support
-- **Multiple Provider Support**: OpenAI, Azure OpenAI, local models (Ollama), and any OpenAI-compatible API
-- **Smart Model Mapping**: Configure BIG and SMALL models via environment variables
+- **Multi-Provider Support**: Support for multiple LLM providers with automatic fallback
+- **Smart Model Mapping**: Configure multiple models per provider with automatic failover
+- **Provider Management**: Priority-based provider selection with circuit breaker pattern
+- **Colored Logging**: Beautiful colored terminal output for better visibility
 - **Function Calling**: Complete tool use support with proper conversion
 - **Streaming Responses**: Real-time SSE streaming support
 - **Image Support**: Base64 encoded image input
 - **Custom Headers**: Automatic injection of custom HTTP headers for API requests
-- **Error Handling**: Comprehensive error handling and logging
+- **Error Handling**: Comprehensive error handling with automatic provider switching
+- **Backward Compatibility**: Full support for legacy environment variable configuration
 
 ## Quick Start
 
@@ -28,6 +31,21 @@ pip install -r requirements.txt
 ```
 
 ### 2. Configure
+
+#### Option A: Multi-Provider Configuration (Recommended)
+
+```bash
+# Copy the example provider configuration
+cp config/providers.example.json config/providers.json
+
+# Edit config/providers.json and configure your providers
+# Set your API keys as environment variables
+export OPENAI_API_KEY="sk-your-openai-key"
+export AZURE_API_KEY="your-azure-key"
+export AZURE_BASE_URL="https://your-resource.openai.azure.com"
+```
+
+#### Option B: Legacy Environment Variables
 
 ```bash
 cp .env.example .env
@@ -59,6 +77,75 @@ ANTHROPIC_BASE_URL=http://localhost:8082 ANTHROPIC_API_KEY="exact-matching-key" 
 ```
 
 ## Configuration
+
+The application supports two configuration methods:
+
+1. **Multi-Provider Configuration** (Recommended): JSON-based configuration with multiple providers
+2. **Legacy Environment Variables**: Traditional environment variable configuration
+
+### Multi-Provider Configuration
+
+The application automatically detects and loads provider configuration from:
+- `config/providers.json`
+- `providers.json` 
+- `config/providers.example.json` (fallback)
+
+#### Provider Configuration Format
+
+```json
+{
+  "providers": [
+    {
+      "name": "openai",
+      "enabled": true,
+      "priority": 1,
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "api_version": null,
+      "timeout": 90,
+      "max_retries": 3,
+      "custom_headers": {},
+      "models": {
+        "big": ["gpt-4o", "gpt-4-turbo"],
+        "middle": ["gpt-4o", "gpt-4-turbo"],
+        "small": ["gpt-4o-mini", "gpt-3.5-turbo"]
+      }
+    }
+  ],
+  "fallback_strategy": "priority",
+  "health_check_interval": 300,
+  "circuit_breaker": {
+    "failure_threshold": 5,
+    "recovery_timeout": 60
+  }
+}
+```
+
+#### Provider Configuration Options
+
+- **name**: Unique provider identifier
+- **enabled**: Whether the provider is active
+- **priority**: Lower numbers = higher priority (1 is highest)
+- **api_key**: API key (supports `${ENV_VAR}` substitution)
+- **base_url**: API endpoint URL
+- **api_version**: API version (for Azure OpenAI)
+- **timeout**: Request timeout in seconds
+- **max_retries**: Maximum retry attempts
+- **custom_headers**: Additional HTTP headers
+- **models**: Model lists for different sizes (big/middle/small)
+
+#### Fallback Strategy
+
+- **priority**: Use providers in priority order (default)
+- **round_robin**: Rotate between available providers
+- **random**: Randomly select from available providers
+
+#### Circuit Breaker
+
+- **failure_threshold**: Number of failures before disabling provider
+- **recovery_timeout**: Seconds to wait before retrying disabled provider
+
+### Legacy Environment Variables
 
 The application automatically loads environment variables from a `.env` file in the project root using `python-dotenv`. You can also set environment variables directly in your shell.
 
@@ -156,7 +243,17 @@ The proxy will automatically include these headers in all API requests to the ta
 
 ### Model Mapping
 
-The proxy maps Claude model requests to your configured models:
+#### Multi-Provider Configuration
+
+The proxy maps Claude model requests to your configured models based on provider priority and availability:
+
+| Claude Request                 | Model Type    | Provider Selection     | Fallback Behavior      |
+| ------------------------------ | ------------- | ---------------------- | ---------------------- |
+| Models with "haiku"            | `small`       | First available provider| Try next provider if failed |
+| Models with "sonnet"           | `middle`      | First available provider| Try next provider if failed |
+| Models with "opus"             | `big`         | First available provider| Try next provider if failed |
+
+#### Legacy Configuration
 
 | Claude Request                 | Mapped To     | Environment Variable   |
 | ------------------------------ | ------------- | ---------------------- |
@@ -164,7 +261,131 @@ The proxy maps Claude model requests to your configured models:
 | Models with "sonnet"           | `MIDDLE_MODEL`| Default: `BIG_MODEL`   |
 | Models with "opus"             | `BIG_MODEL`   | Default: `gpt-4o`      |
 
-### Provider Examples
+### Multi-Provider Examples
+
+#### Complete Multi-Provider Setup
+
+```json
+{
+  "providers": [
+    {
+      "name": "openai-primary",
+      "enabled": true,
+      "priority": 1,
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com/v1",
+      "models": {
+        "big": ["gpt-4o", "gpt-4-turbo"],
+        "middle": ["gpt-4o", "gpt-4-turbo"],
+        "small": ["gpt-4o-mini", "gpt-3.5-turbo"]
+      }
+    },
+    {
+      "name": "azure-backup",
+      "enabled": true,
+      "priority": 2,
+      "api_key": "${AZURE_API_KEY}",
+      "base_url": "${AZURE_BASE_URL}",
+      "api_version": "2024-02-15-preview",
+      "models": {
+        "big": ["gpt-4o", "gpt-4"],
+        "middle": ["gpt-4o", "gpt-4"],
+        "small": ["gpt-4o-mini", "gpt-35-turbo"]
+      }
+    },
+    {
+      "name": "local-ollama",
+      "enabled": true,
+      "priority": 3,
+      "api_key": "dummy-key",
+      "base_url": "http://localhost:11434/v1",
+      "models": {
+        "big": ["llama3.1:70b", "llama3.1:8b"],
+        "middle": ["llama3.1:70b", "llama3.1:8b"],
+        "small": ["llama3.1:8b", "llama3.1:7b"]
+      }
+    }
+  ],
+  "fallback_strategy": "priority",
+  "circuit_breaker": {
+    "failure_threshold": 3,
+    "recovery_timeout": 120
+  }
+}
+```
+
+#### Provider-Specific Examples
+
+**OpenAI Provider:**
+```json
+{
+  "name": "openai",
+  "enabled": true,
+  "priority": 1,
+  "api_key": "${OPENAI_API_KEY}",
+  "base_url": "https://api.openai.com/v1",
+  "models": {
+    "big": ["gpt-4o", "gpt-4-turbo"],
+    "middle": ["gpt-4o", "gpt-4-turbo"],
+    "small": ["gpt-4o-mini", "gpt-3.5-turbo"]
+  }
+}
+```
+
+**Azure OpenAI Provider:**
+```json
+{
+  "name": "azure",
+  "enabled": true,
+  "priority": 2,
+  "api_key": "${AZURE_API_KEY}",
+  "base_url": "${AZURE_BASE_URL}",
+  "api_version": "2024-02-15-preview",
+  "models": {
+    "big": ["gpt-4o", "gpt-4"],
+    "middle": ["gpt-4o", "gpt-4"],
+    "small": ["gpt-4o-mini", "gpt-35-turbo"]
+  }
+}
+```
+
+**Local Ollama Provider:**
+```json
+{
+  "name": "ollama",
+  "enabled": true,
+  "priority": 3,
+  "api_key": "dummy-key",
+  "base_url": "http://localhost:11434/v1",
+  "models": {
+    "big": ["llama3.1:70b", "llama3.1:8b"],
+    "middle": ["llama3.1:70b", "llama3.1:8b"],
+    "small": ["llama3.1:8b", "llama3.1:7b"]
+  }
+}
+```
+
+**Custom Provider:**
+```json
+{
+  "name": "custom-api",
+  "enabled": true,
+  "priority": 4,
+  "api_key": "${CUSTOM_API_KEY}",
+  "base_url": "${CUSTOM_BASE_URL}",
+  "custom_headers": {
+    "Authorization": "Bearer ${CUSTOM_TOKEN}",
+    "X-Custom-Header": "custom-value"
+  },
+  "models": {
+    "big": ["custom-model-1"],
+    "middle": ["custom-model-2"],
+    "small": ["custom-model-3"]
+  }
+}
+```
+
+### Legacy Provider Examples
 
 #### OpenAI
 
@@ -218,6 +439,61 @@ response = httpx.post(
     }
 )
 ```
+
+## Multi-Provider Features
+
+### Automatic Fallback
+
+The proxy automatically handles provider failures with intelligent fallback:
+
+1. **Provider-Level Fallback**: If a provider fails, automatically switches to the next priority provider
+2. **Model-Level Fallback**: If a specific model fails, tries the next model in the same provider
+3. **Circuit Breaker**: Temporarily disables failed providers to prevent cascading failures
+4. **Health Monitoring**: Background health checks with automatic recovery
+
+### Colored Logging
+
+The proxy provides beautiful colored terminal output for better visibility:
+
+- **Provider Names**: Each provider has a unique color for easy identification
+- **Status Indicators**: ✅ healthy, ❌ error, ⚠️ warning, ℹ️ info
+- **Model Information**: Clear categorization of BIG/MIDDLE/SMALL models
+- **Fallback Notifications**: Real-time notifications when switching providers
+
+### Provider Status Monitoring
+
+Monitor provider health and status:
+
+```bash
+# Check provider status via API
+curl http://localhost:8082/health
+
+# Response includes provider status information
+{
+  "status": "healthy",
+  "providers": {
+    "openai": {
+      "status": "healthy",
+      "priority": 1,
+      "failure_count": 0
+    },
+    "azure": {
+      "status": "circuit_open",
+      "priority": 2,
+      "failure_count": 5
+    }
+  }
+}
+```
+
+### Configuration Validation
+
+The proxy validates your configuration on startup:
+
+- **Provider Validation**: Checks API keys and endpoints
+- **Model Validation**: Verifies model availability
+- **Configuration Display**: Shows all configured providers with colored output
+- **Error Reporting**: Clear error messages for configuration issues
 
 ## Integration with Claude Code
 

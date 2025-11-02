@@ -69,7 +69,7 @@ a = Analysis(
 # Key hidden imports included
 hiddenimports=[
     'src.api.endpoints',
-    'src.core.config',
+    'utils.env',
     'src.core.client',
     'uvicorn.logging',
     'uvicorn.loops.auto',

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from src.api.endpoints import router as api_router
 import uvicorn
 import sys
-from src.core.config import config
+from utils.env import config
 
 app = FastAPI(title="Claude-to-OpenAI API Proxy", version="1.0.0")
 
@@ -39,17 +39,9 @@ def main():
         print(f"  Claude sonnet/opus models -> {config.big_model}")
         sys.exit(0)
 
-    # Configuration summary
+    # Configuration summary is now handled by config.print_provider_info()
     print("🚀 Claude-to-OpenAI API Proxy v1.0.0")
-    print(f"✅ Configuration loaded successfully")
-    print(f"   OpenAI Base URL: {config.openai_base_url}")
-    print(f"   Big Model (opus): {config.big_model}")
-    print(f"   Middle Model (sonnet): {config.middle_model}")
-    print(f"   Small Model (haiku): {config.small_model}")
-    print(f"   Max Tokens Limit: {config.max_tokens_limit}")
-    print(f"   Request Timeout: {config.request_timeout}s")
-    print(f"   Server: {config.host}:{config.port}")
-    print(f"   Client API Key Validation: {'Enabled' if config.anthropic_api_key else 'Disabled'}")
+    print("✅ Configuration loaded successfully")
     print("")
 
     # Parse log level - extract just the first word to handle comments

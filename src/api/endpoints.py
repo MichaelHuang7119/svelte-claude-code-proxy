@@ -2,12 +2,16 @@ from fastapi import APIRouter, HTTPException, Request, Header, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from datetime import datetime
 import uuid
+import json
+from pathlib import Path
 from typing import Optional
 
 from src.core.config import config
 from src.core.logging import logger
 from src.core.client import OpenAIClient
 from src.models.claude import ClaudeMessagesRequest, ClaudeTokenCountRequest
+from src.models.provider import ProviderManagerConfig
+from src.core.provider_manager import ProviderStatus
 from src.conversion.request_converter import convert_claude_to_openai
 from src.conversion.response_converter import (
     convert_openai_to_claude_response,
@@ -365,3 +369,179 @@ async def root():
             "test_connection": "/test-connection",
         },
     }
+
+
+# Configuration management endpoints
+@router.get("/api/config/providers")
+async def get_providers_config():
+    """Get current provider configuration"""
+    try:
+        config_path = None
+        possible_paths = [
+            "config/providers.json",
+            "providers.json",
+            "config/providers.example.json"
+        ]
+        
+        for path in possible_paths:
+            if Path(path).exists():
+                config_path = path
+                break
+        
+        if not config_path:
+            raise HTTPException(status_code=404, detail="Configuration file not found")
+        
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+        
+        return config_data
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Configuration file not found")
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON in configuration file: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error reading configuration: {e}")
+        raise HTTPException(status_code=500, detail=f"Error reading configuration: {str(e)}")
+
+
+@router.put("/api/config/providers")
+async def save_providers_config(config_data: dict):
+    """Save provider configuration"""
+    try:
+        config_path = "config/providers.json"
+        
+        # Validate the configuration
+        try:
+            provider_config = ProviderManagerConfig(**config_data)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid configuration: {str(e)}")
+        
+        # Save new configuration (backup removed per user request)
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, indent=2, ensure_ascii=False)
+        
+        return {"status": "success", "message": "Configuration saved successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving configuration: {e}")
+        raise HTTPException(status_code=500, detail=f"Error saving configuration: {str(e)}")
+
+
+@router.post("/api/config/reload")
+async def reload_config():
+    """Reload provider configuration from file"""
+    try:
+        success = config.load_provider_config()
+        if success:
+            return {"status": "success", "message": "Configuration reloaded successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to reload configuration")
+    except Exception as e:
+        logger.error(f"Error reloading configuration: {e}")
+        raise HTTPException(status_code=500, detail=f"Error reloading configuration: {str(e)}")
+
+
+@router.post("/api/providers/{provider_name}/test")
+async def test_provider(provider_name: str):
+    """Test connection to a specific provider"""
+    try:
+        if not config.provider_manager:
+            raise HTTPException(status_code=503, detail="Provider manager not initialized")
+        
+        provider_state = config.provider_manager.providers.get(provider_name)
+        if not provider_state:
+            raise HTTPException(status_code=404, detail=f"Provider '{provider_name}' not found")
+        
+        # Collect all available models in priority order: small -> middle -> big
+        # Try each model until one succeeds (some models may not be available)
+        models_to_try = []
+        if provider_state.provider.models.small:
+            models_to_try.extend([("small", m) for m in provider_state.provider.models.small])
+        if provider_state.provider.models.middle:
+            models_to_try.extend([("middle", m) for m in provider_state.provider.models.middle])
+        if provider_state.provider.models.big:
+            models_to_try.extend([("big", m) for m in provider_state.provider.models.big])
+        
+        if not models_to_try:
+            raise HTTPException(status_code=400, detail=f"No models available for provider '{provider_name}'")
+        
+        # Try each model until one succeeds
+        test_response = None
+        model = None
+        model_type_used = None
+        last_error = None
+        
+        for model_type, test_model in models_to_try:
+            try:
+                test_response = await provider_state.client.create_chat_completion({
+                    "model": test_model,
+                    "messages": [{"role": "user", "content": "Hello"}],
+                    "max_tokens": 5,
+                })
+                model = test_model
+                model_type_used = model_type
+                break  # Success, exit loop
+            except Exception as e:
+                last_error = e
+                logger.debug(f"Model {test_model} failed: {e}, trying next model...")
+                continue  # Try next model
+        
+        if not test_response:
+            # All models failed
+            error_msg = f"All models failed for provider '{provider_name}'"
+            if last_error:
+                error_msg += f": {str(last_error)}"
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        return {
+            "status": "success",
+            "message": f"Successfully connected to {provider_name} API",
+            "model_used": model,
+            "provider": provider_name,
+            "timestamp": datetime.now().isoformat(),
+            "response_id": test_response.get("id", "unknown"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Provider test failed: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "failed",
+                "error_type": "API Error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            },
+        )
+
+
+@router.put("/api/providers/{provider_name}/toggle")
+async def toggle_provider(provider_name: str, request_body: dict):
+    """Temporarily enable/disable a provider (does not modify file)"""
+    try:
+        if not config.provider_manager:
+            raise HTTPException(status_code=503, detail="Provider manager not initialized")
+        
+        provider_state = config.provider_manager.providers.get(provider_name)
+        if not provider_state:
+            raise HTTPException(status_code=404, detail=f"Provider '{provider_name}' not found")
+        
+        enabled = request_body.get("enabled", True)
+        
+        # Update the provider config (in-memory only)
+        provider_state.provider.enabled = enabled
+        
+        # If disabling, mark as unhealthy
+        if not enabled:
+            provider_state.status = ProviderStatus.UNHEALTHY
+        elif provider_state.status == ProviderStatus.UNHEALTHY:
+            provider_state.status = ProviderStatus.HEALTHY
+        
+        return {"status": "success", "message": f"Provider '{provider_name}' {'enabled' if enabled else 'disabled'}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error toggling provider: {e}")
+        raise HTTPException(status_code=500, detail=f"Error toggling provider: {str(e)}")

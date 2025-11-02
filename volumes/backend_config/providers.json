@@ -1,0 +1,60 @@
+{
+  "providers": [
+    {
+      "name": "qwen",
+      "enabled": true,
+      "priority": 1,
+      "api_key": "${QWEN_API_KEY}",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_version": null,
+      "timeout": 90,
+      "max_retries": 3,
+      "custom_headers": {},
+      "models": {
+        "big": [
+          "qwen3-coder-plus-2025-09-23"
+        ],
+        "middle": [
+          "qwen3-coder-plus-2025-09-23"
+        ],
+        "small": [
+          "qwen-flash"
+        ]
+      }
+    },
+    {
+      "name": "modelscope",
+      "enabled": true,
+      "priority": 2,
+      "api_key": "${MODELSCOPE_API_KEY}",
+      "base_url": "https://api-inference.modelscope.cn/v1/",
+      "api_version": null,
+      "timeout": 90,
+      "max_retries": 3,
+      "custom_headers": {},
+      "models": {
+        "big": [
+          "ZhipuAI/GLM-4.6",
+          "deepseek-ai/DeepSeek-V3.2-Exp",
+          "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+        ],
+        "middle": [
+          "ZhipuAI/GLM-4.6",
+          "deepseek-ai/DeepSeek-V3.2-Exp",
+          "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+        ],
+        "small": [
+          "Qwen/Qwen2.5-7B-Instruct",
+          "Qwen/Qwen3-8B",
+          "Qwen/Qwen3-32B"
+        ]
+      }
+    }
+  ],
+  "fallback_strategy": "priority",
+  "health_check_interval": 300,
+  "circuit_breaker": {
+    "failure_threshold": 5,
+    "recovery_timeout": 60
+  }
+}

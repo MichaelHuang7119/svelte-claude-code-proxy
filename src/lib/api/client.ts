@@ -10,8 +10,26 @@ import type {
 	ApiResponse
 } from '$lib/types/config';
 
-// Use relative URLs to leverage Vite proxy, or absolute URL if specified in env
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+// Determine API base URL based on environment
+// In browser: use relative URLs (server-side proxy) or absolute URL if provided
+// In server: use Docker internal address or absolute URL
+const getApiBaseUrl = () => {
+	// Access VITE env var (available in both client and server during build)
+	const envUrl = (import.meta as any).env?.VITE_API_BASE_URL || '';
+	
+	// If running in browser and URL is Docker internal address, use relative path (server proxy)
+	if (typeof window !== 'undefined') {
+		if (envUrl.includes('backend:') || envUrl === '') {
+			return '';
+		}
+		return envUrl;
+	}
+	
+	// Server-side: use Docker internal address
+	return envUrl || 'http://backend:8082';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiError extends Error {
 	constructor(

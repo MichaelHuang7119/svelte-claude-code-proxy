@@ -1,0 +1,61 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: svelte-claude-code-proxy-backend
+    ports:
+      - "8082"
+    # Load environment variables from project root .env file
+    env_file:
+      - .env
+    environment:
+      # Override default settings for Docker
+      - HOST=0.0.0.0
+      - PORT=8082
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - RELOAD=false
+      # Disable client API key validation (empty string disables validation)
+      - ANTHROPIC_API_KEY=
+    volumes:
+      # Mount config directory for providers.json (read-write for saving config)
+      - ./volumes/backend_config:/app/config:rw
+    restart: unless-stopped
+    healthcheck:
+      # Use GET method for health check (endpoint only supports GET, not HEAD)
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -O- http://localhost:8082/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # VITE_API_BASE_URL must be set at build time (Vite env vars)
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://backend:8082}
+    container_name: svelte-claude-code-proxy-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    # Load environment variables from project root .env file
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+

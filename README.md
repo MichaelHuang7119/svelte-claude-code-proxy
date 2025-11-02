@@ -146,20 +146,50 @@ source .env.proxy
 
 ## 快速开始
 
-### 安装依赖
+### 方式 1：Docker Compose 部署（推荐）
+
+使用 Docker Compose 一键部署前后端服务：
+
+```bash
+# 1. 准备配置文件
+cd backend
+cp src/claude_code_proxy/.env.example .env
+# 编辑 .env 文件，设置 API keys
+
+cd src/claude_code_proxy/config
+cp providers.example.json providers.json
+# 编辑 providers.json，配置 providers
+
+# 2. 启动服务
+cd ../../..
+docker-compose up -d
+
+# 3. 查看日志
+docker-compose logs -f
+
+# 4. 访问服务
+# 前端: http://localhost:3000
+# 后端: http://localhost:8082
+```
+
+详细部署说明请查看 [DOCKER.md](./DOCKER.md)
+
+### 方式 2：本地开发
+
+#### 安装依赖
 
 ```bash
 npm install
 ```
 
-### 启动开发服务器
+#### 启动开发服务器
 
 ```bash
 # 确保后端服务运行在 http://localhost:8082
-cd /home/huangyf/code/claude-code-proxy
-python src/main.py
+cd backend
+python run.py
 
-# 启动前端开发服务器
+# 启动前端开发服务器（新终端）
 cd /home/huangyf/code/svelte-claude-code-proxy
 npm run dev
 

@@ -1,0 +1,51 @@
+# Dependencies
+node_modules
+backend/**/__pycache__
+backend/**/*.pyc
+backend/**/.pytest_cache
+backend/**/uv.lock
+
+# Build outputs
+build
+dist
+.output
+.svelte-kit
+
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+**/tests
+**/*.test.*
+**/*.spec.*
+
+# Logs
+*.log
+logs
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache
+

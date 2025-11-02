@@ -13,8 +13,8 @@ from src.core.colored_logger import colored_logger
 class Config:
     def __init__(self):
         self.openai_api_key = os.environ.get("OPENAI_API_KEY")
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
+        # OPENAI_API_KEY is optional if using provider config file
+        # Will be validated in load_provider_config() if needed
         
         # Add Anthropic API key for client validation
         self.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -85,30 +85,59 @@ class Config:
         """Load provider configuration from file or use legacy format"""
         if config_path is None:
             # Try to find provider config file
+            # Only use .example.json if the actual .json doesn't exist
             possible_paths = [
                 "config/providers.json",
-                "providers.json",
-                "config/providers.example.json"
+                "providers.json"
             ]
             
             for path in possible_paths:
                 if Path(path).exists():
                     config_path = path
                     break
+            
+            # Only fall back to example file if no actual config exists
+            if not config_path:
+                example_paths = [
+                    "config/providers.example.json",
+                    "providers.example.json"
+                ]
+                for path in example_paths:
+                    if Path(path).exists():
+                        colored_logger.warning(f"⚠️  Using example config file: {path}")
+                        colored_logger.warning("   Please create config/providers.json from the example file")
+                        config_path = path
+                        break
         
         if config_path and Path(config_path).exists():
             try:
                 # Load from JSON file
                 provider_config = ProviderManagerConfig.from_file(config_path)
                 self.provider_manager = ProviderManager(provider_config)
-                self.use_provider_config = True
-                colored_logger.success(f"✅ Loaded provider configuration from {config_path}")
-                return True
+                
+                # Check if any providers were initialized
+                if not self.provider_manager.providers:
+                    colored_logger.error("❌ No providers were successfully initialized")
+                    colored_logger.error("   Please check that required environment variables are set")
+                    colored_logger.warning("⚠️  Falling back to legacy configuration")
+                    self.provider_manager = None
+                else:
+                    self.use_provider_config = True
+                    colored_logger.success(f"✅ Loaded provider configuration from {config_path}")
+                    colored_logger.info(f"   Initialized {len(self.provider_manager.providers)} provider(s)")
+                    return True
             except Exception as e:
                 colored_logger.error(f"❌ Failed to load provider config from {config_path}: {e}")
                 colored_logger.warning("⚠️  Falling back to legacy configuration")
+                self.provider_manager = None
         
         # Fall back to legacy configuration
+        # For legacy config, OPENAI_API_KEY is required
+        if not self.openai_api_key:
+            colored_logger.error("❌ OPENAI_API_KEY not found in environment variables")
+            colored_logger.error("   Please set OPENAI_API_KEY or configure providers.json")
+            return False
+        
         try:
             provider_config = ProviderManagerConfig.from_env_config(self)
             self.provider_manager = ProviderManager(provider_config)

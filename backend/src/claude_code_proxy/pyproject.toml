@@ -46,6 +46,8 @@ Issues = "https://github.com/holegots/claude-code-proxy/issues"
 claude-code-proxy = "src.main:main"
 
 [tool.uv]
+# Note: dev-dependencies is deprecated, but still functional
+# Migrate to dependency-groups.dev in the future
 dev-dependencies = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",

@@ -72,25 +72,33 @@ class ProviderManager:
             if not provider_config.enabled:
                 continue
 
-            # Resolve environment variables
-            resolved_provider = provider_config.resolve_env_vars()
+            try:
+                # Resolve environment variables
+                resolved_provider = provider_config.resolve_env_vars()
 
-            # Create OpenAI client
-            client = OpenAIClient(
-                api_key=resolved_provider.api_key,
-                base_url=resolved_provider.base_url,
-                timeout=resolved_provider.timeout,
-                api_version=resolved_provider.api_version,
-                custom_headers=resolved_provider.custom_headers
-            )
+                # Create OpenAI client
+                client = OpenAIClient(
+                    api_key=resolved_provider.api_key,
+                    base_url=resolved_provider.base_url,
+                    timeout=resolved_provider.timeout,
+                    api_version=resolved_provider.api_version,
+                    custom_headers=resolved_provider.custom_headers
+                )
 
-            # Create provider state
-            state = ProviderState(
-                provider=resolved_provider,
-                client=client
-            )
-            self.providers[resolved_provider.name] = state
-            self.logger.info(f"✅ Initialized provider: {resolved_provider.name}")
+                # Create provider state
+                state = ProviderState(
+                    provider=resolved_provider,
+                    client=client
+                )
+                self.providers[resolved_provider.name] = state
+                self.logger.info(f"✅ Initialized provider: {resolved_provider.name}")
+            except ValueError as e:
+                # Skip providers with missing environment variables
+                self.logger.warning(f"⚠️  Skipping provider {provider_config.name}: {e}")
+                continue
+            except Exception as e:
+                self.logger.error(f"❌ Failed to initialize provider {provider_config.name}: {e}")
+                continue
 
     def _start_health_checks(self):
         """Start background health check task"""

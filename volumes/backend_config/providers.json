@@ -23,6 +23,28 @@
       }
     },
     {
+      "name": "aiping",
+      "enabled": true,
+      "priority": 1,
+      "api_key": "${AIPING_API_KEY}",
+      "base_url": "https://testacs.aiping.cn/api/v1",
+      "api_version": null,
+      "timeout": 90,
+      "max_retries": 3,
+      "custom_headers": {},
+      "models": {
+        "big": [
+          "MiniMax-M2"
+        ],
+        "middle": [
+          "MiniMax-M2"
+        ],
+        "small": [
+          "MiniMax-M2"
+        ]
+      }
+    },
+    {
       "name": "modelscope",
       "enabled": true,
       "priority": 2,
